@@ -1,0 +1,13 @@
+PolyChat
+Copyright (C) 2025-2026 Xiaofan Liu
+
+Original PolyChat source code is licensed under the GNU Affero General Public
+License, version 3 only (AGPL-3.0-only). See LICENSE and LICENSING.md.
+
+PolyChat branding is not included in the software license. See TRADEMARKS.md.
+
+Model provider names are trademarks of their respective owners. PolyChat is
+not affiliated with or endorsed by any of them.
+
+KaTeX is loaded from a public CDN at runtime, is not redistributed in this
+repository, and remains subject to its own license.
