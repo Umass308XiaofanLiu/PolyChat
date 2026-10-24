@@ -1,46 +1,55 @@
 # PolyChat
 
-**One HTML file, every model.** PolyChat is a browser-based chat client that talks to Google Gemini, OpenAI, Anthropic Claude, DeepSeek and local models served by LM Studio from a single interface, with streaming responses, multimodal input, branching conversation history and LaTeX rendering.
+A single-file browser client for chatting with multiple LLM providers.
 
-There is no backend and no build step for users: the whole application ships as one self-contained HTML file. Open it in a browser, add your own API keys, and chat. Keys and conversations stay in the browser's `localStorage`.
+PolyChat provides one interface for Google Gemini, OpenAI, Anthropic Claude, DeepSeek and local models served through LM Studio. It supports streaming responses, multimodal input, branching conversation history and LaTeX rendering. The application has no backend. It ships as one self-contained HTML file, and API keys and conversations stay in the browser's `localStorage`.
+
+## Overview
+
+| | |
+|---|---|
+| Providers | Google Gemini, OpenAI, Anthropic Claude, DeepSeek, LM Studio (OpenAI-compatible, multiple servers) |
+| Frontend | Vanilla JavaScript, HTML and CSS; KaTeX for mathematics |
+| Build | `build.py` bundles the sources into a single HTML file |
+| Storage | Browser `localStorage` only |
 
 ## Features
 
-**Multi-provider, one interface**
-- Google Gemini (2.5 Flash Lite, 3 Flash, 3 Pro), OpenAI GPT-5 (Nano, Mini, 5.2), Anthropic Claude 4.5 (Haiku, Sonnet, Opus) and DeepSeek V3.2 (Chat, Reasoner).
-- Local models through LM Studio's OpenAI-compatible server, including **several LM Studio servers at once** (for example a small model on a laptop and a larger one on a GPU workstation); models are discovered from each server's `/v1/models`.
-- Switch models mid-conversation; each reply is tagged with the model that produced it. Model visibility is configurable per model.
+### Providers and models
+- Gemini 2.5 Flash Lite, Gemini 3 Flash and 3 Pro; GPT-5 Nano, GPT-5 Mini and GPT-5.2; Claude Haiku, Sonnet and Opus 4.5; DeepSeek V3.2 (Chat and Reasoner).
+- Local models through one or more LM Studio servers. Available models are discovered from each server's `/v1/models` endpoint.
+- The model can be changed mid-conversation. Each reply records which model produced it, and individual models can be shown or hidden in the model list.
 
-**Streaming and generation control**
-- Token-by-token streaming over server-sent events for every provider, rendered live (throttled to one repaint per 100 ms so long answers stay smooth).
-- **Stop** at any time: rendering ends immediately and the partial answer is kept.
-- Reasoning models that emit `<think>…</think>` blocks get a collapsible **Thinking** panel, separated from the final answer.
+### Streaming
+- Responses stream token by token over server-sent events for every provider. Rendering is throttled to one update per 100 ms, so long responses stay smooth.
+- Generation can be stopped at any time, and the partial response is kept.
+- `<think>…</think>` output from reasoning models is shown in a collapsible panel, separate from the final answer.
 
-**Branching conversation history**
-- **Regenerate** any assistant reply without losing the old one; navigate versions with `◀ 1/3 ▶`.
-- **Edit and resend** any earlier user message; the previous branch, including everything that followed it, is preserved.
-- Each branch keeps its own continuation, and only the active branch is sent to the model as context.
+### Branching conversation history
+- **Regenerate** any assistant response while keeping the earlier versions, and switch between them with `◀ 1/3 ▶`.
+- **Edit and resend** any earlier user message. The previous branch, including all messages that followed it, is preserved.
+- Only the active branch is sent to the model as context.
 
-**Multimodal input**
-- Images (PNG, JPG, GIF, …) by file picker, drag and drop or clipboard paste, with previews and a zoom view; images are sent in each provider's native multimodal format.
-- Text and code files (Python, MATLAB, R, C/C++, Java, Go, Rust, Julia, SQL, VHDL and 40+ other languages, plus TXT/MD/JSON/CSV) are inlined into the prompt with clear file delimiters.
+### Attachments
+- Images can be added with the file picker, drag and drop or clipboard paste. They are previewed with a zoom view and sent in each provider's native multimodal format.
+- Text and source files (Python, MATLAB, R, C/C++, Java, Go, Rust, Julia, SQL, VHDL and more than 40 other formats, plus TXT, Markdown, JSON and CSV) are inlined into the prompt with explicit file delimiters.
 
-**Rendering**
-- Markdown with fenced code blocks, language labels and one-click copy.
-- LaTeX math via KaTeX for `$…$`, `$$…$$`, `\(…\)` and `\[…\]`.
-- Light, dark and system themes; a minimal iOS-inspired design.
+### Rendering
+- Markdown, including fenced code blocks with language labels and a copy button.
+- Mathematics via KaTeX, with `$…$`, `$$…$$`, `\(…\)` and `\[…\]` delimiters.
+- Light, dark and system themes.
 
 ## Architecture
 
 ```
 src/
 ├── html/template.html     page skeleton with CSS/JS placeholders
-├── css/styles.css         design system, light/dark themes
+├── css/styles.css         styles and light/dark themes
 └── js/
     ├── utils/
-    │   ├── storage.js     localStorage persistence (settings, chats), theme manager
-    │   └── markdown.js    Markdown + LaTeX renderer
-    ├── api/               one adapter per provider, same contract
+    │   ├── storage.js     localStorage persistence (settings, chats) and theme handling
+    │   └── markdown.js    Markdown and LaTeX rendering
+    ├── api/               one adapter per provider, sharing a common interface
     │   ├── openai.js
     │   ├── claude.js
     │   ├── gemini.js
@@ -48,37 +57,52 @@ src/
     │   └── lmstudio.js
     └── ui/
         ├── chatHistory.js conversation store and branching model
-        ├── sidebar.js     chat list (create, rename, delete)
-        ├── chat.js        composer, attachments, streaming view, regenerate/edit
+        ├── sidebar.js     conversation list
+        ├── chat.js        composer, attachments, streaming view, regenerate and edit
         ├── settings.js    API keys, model visibility, LM Studio servers
-        └── main.js        bootstrap
-build.py                   bundles everything into dist/AI_Chat_Client.html
+        └── main.js        initialization
+build.py                   bundles the sources into dist/AI_Chat_Client.html
 ```
 
-**Provider adapters.** Every provider is an object with the same contract:
-`chat(messages, model, credentials, onChunk)` streams the reply and calls `onChunk(text)` for each delta, then resolves with the full text; `validate()` checks the credentials. The UI builds one provider-neutral message list (OpenAI-style roles, with `image_url` parts for images), and each adapter translates it to its own API:
+### Provider adapters
 
-| Adapter | Translation |
+Each provider implements the same interface:
+- `chat(messages, model, credentials, onChunk)` streams the response, calls `onChunk(text)` for each delta, and resolves with the complete text.
+- `validate()` checks the credentials.
+
+The UI builds one provider-neutral message list, using OpenAI-style roles and `image_url` parts for images. Each adapter converts that list to its provider's API:
+
+| Adapter | Request and stream format |
 |---|---|
-| OpenAI, DeepSeek, LM Studio | Chat Completions format, SSE `choices[].delta.content` |
-| Claude | system prompt lifted into `system`; images converted to base64 `image` blocks; SSE `content_block_delta` events |
-| Gemini | roles mapped to `user`/`model`, images to `inlineData`, system prompt to `systemInstruction`; `streamGenerateContent?alt=sse` |
+| OpenAI, DeepSeek, LM Studio | Chat Completions; SSE `choices[].delta.content` |
+| Claude | System prompt passed as `system`; images as base64 `image` blocks; SSE `content_block_delta` events |
+| Gemini | Roles mapped to `user` / `model`, images to `inlineData`, system prompt to `systemInstruction`; `streamGenerateContent?alt=sse` |
 
-Adding a provider means writing one adapter file and registering it in the model list; the UI does not change.
+Adding a provider requires one adapter file and an entry in the model list; the UI does not change.
 
-**Streaming pipeline.** Each adapter reads the response body with a `ReadableStream` reader, buffers partial lines across network chunks, parses SSE `data:` frames and forwards text deltas. The chat view accumulates the raw text, separates `<think>` content from the answer, and re-renders Markdown/LaTeX on a 100 ms throttle.
+### Streaming pipeline
 
-**Branching model.** Conversations are stored as an ordered message list. When a reply is regenerated or a user message is edited, the message gains a `responseHistory` array; each entry stores that version's content, model, timestamp and its own **continuation** (the messages that followed it). Switching versions swaps in the stored continuation, so every branch stays complete, and the context sent to the model is always the active path only.
+Each adapter reads the response body with a `ReadableStream` reader. It buffers partial lines across network chunks, parses SSE `data:` frames and forwards the text deltas. The chat view accumulates the raw text, separates `<think>` content from the answer, and re-renders Markdown and LaTeX at most once every 100 ms.
 
-**Persistence and privacy.** Settings, API keys and chat history are stored in `localStorage` under the `ai_chat_*` keys. Nothing is sent anywhere except directly to the provider you select (or to your own proxy for Claude, see below).
+### Branching model
 
-**Single-file build.** `build.py` concatenates the CSS and the JavaScript modules in dependency order (utils → API adapters → UI → bootstrap) into the HTML template, producing one portable file in `dist/`. KaTeX is loaded from a CDN.
+A conversation is an ordered list of messages. When a response is regenerated or a user message is edited, that message gains a `responseHistory` array. Each entry stores one version's content, model and timestamp, together with its **continuation**: the messages that followed it. Switching versions swaps in the stored continuation, so every branch stays complete. The context sent to the model is always the active path.
+
+### Build
+
+`build.py` concatenates the CSS and the JavaScript modules into the HTML template in dependency order (utilities, provider adapters, UI, initialization). The result is a single portable file in `dist/`. KaTeX is loaded from a CDN.
+
+## Requirements
+
+- A current version of Chrome, Edge or Firefox.
+- An API key for each hosted provider you use, or a running LM Studio server.
+- Python 3, to build from source.
 
 ## Getting started
 
-**Use it:** open `dist/AI_Chat_Client.html` in Chrome, Edge or Firefox, click the gear icon, enter the API keys you have, and pick a model.
+Open `dist/AI_Chat_Client.html` in the browser, open **Settings** (the gear icon), enter your API keys and select a model.
 
-**Build from source:**
+To build from source:
 
 ```bash
 python build.py        # writes dist/AI_Chat_Client.html
@@ -86,18 +110,27 @@ python build.py        # writes dist/AI_Chat_Client.html
 
 ### Provider setup
 
-| Provider | What you need |
+| Provider | Requirement |
 |---|---|
 | Google Gemini | API key from [Google AI Studio](https://aistudio.google.com/) |
 | OpenAI | API key from the [OpenAI Platform](https://platform.openai.com/) |
-| Anthropic Claude | API key **and** a CORS proxy URL (see below) |
+| Anthropic Claude | API key and a CORS proxy URL (see below) |
 | DeepSeek | API key from the [DeepSeek Platform](https://platform.deepseek.com/) |
-| LM Studio | start LM Studio's local server, enter its URL (default `http://localhost:1234`) and click **Connect & Verify**; add more servers as needed |
+| LM Studio | Start the LM Studio server, enter its URL (default `http://localhost:1234`) and select **Connect & Verify**. Additional servers can be added. |
 
-**Claude and CORS.** Browsers block direct calls to the Anthropic API from a web page, so PolyChat sends Claude requests to a proxy URL you configure, which forwards them to `https://api.anthropic.com/v1/messages`. Use a proxy you control.
+**Claude and CORS.** Browsers block direct requests from a web page to the Anthropic API. PolyChat therefore sends Claude requests to a proxy URL that you configure, and the proxy forwards them to `https://api.anthropic.com/v1/messages`. Use a proxy you control.
+
+## Privacy
+
+Settings, API keys and conversation history are stored only in the browser's `localStorage`, under keys prefixed with `ai_chat_`. Requests go directly from the browser to the selected provider, or to your own proxy for Claude. There is no PolyChat server.
 
 ## Limitations
 
-- PDFs can be attached and are referenced by name in the prompt, but their content is not extracted yet.
-- API keys live in the browser's `localStorage`; use PolyChat on a machine you trust.
-- Model lists are defined in the adapters and need updating when providers release new models.
+- PDF attachments are referenced by file name only; their content is not yet extracted.
+- Stopping a response ends rendering, but the underlying network request is not cancelled.
+- API keys are stored in `localStorage`; use PolyChat only on a trusted device.
+- Model lists are defined in the adapters and must be updated when providers release new models.
+
+## Development
+
+The implementation was developed with an AI coding agent (Claude Code). The author defined the requirements, reviewed each change and merged it through pull requests.
